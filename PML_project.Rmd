@@ -1,0 +1,112 @@
+---
+title: "PML Project"
+---
+
+Hi, I'll represent six stages of my work - 
+
+  1. Getting the data and cleaning it.
+  2. Creating training set and a cv set from checking my model.
+  3. Deciding which variables to put to train, and training.
+  4. Evaluating the model.
+  5. Predicting the test set.
+  6. Writing the results to the files.
+
+
+### Getting the data and cleaning it
+Reading the training and testing files:
+```
+require(caret)
+trainingData<-read.csv("pml-training.csv")
+testData<-read.csv("pml-testing.csv")
+```
+
+Finding which columns of the training set have at least 30% NA (don't want to use them):
+
+```
+isna<-sapply(trainingData, function(x)sum(is.na(x))>0.3)
+```
+Finding which columns have a "factor" class - which indicates that there are all blanks (some of them are not but I added back the relevant ones - "user_name" and "classe"):
+
+```
+col_class<-sapply(trainingData,function(x)(class(x[1])))
+is_factor<-col_class=="factor"
+is_factor['user_name']<-F
+is_factor['classe']<-F
+```
+
+Generate new data frame without the NA or "factor" columns:
+```
+inds<-isna==T|is_factor==T
+NewData<-trainingData[trainingData$new_window=="no",!inds]
+```
+Note that I excluded rows with new_window=="yes" because the test set has only "no" values
+
+### Creating training and cv sets in order to check the model
+As we done in class:
+```
+set.seed(1)
+inTrain = createDataPartition(NewData$classe, p = 3/4)[[1]]
+training<-NewData[ inTrain,]
+cv<-NewData[ -inTrain,]
+```
+
+### Deciding which variables to put to train, and training
+In order to have a relative fast training, I wanted to put about 20 variables in the prediction model.
+I figured that the best predictors to evaluate the type of the barbell lift are the angles - raw, pitch a yaw, and not the acceleration.
+
+So I took the column which has one of those words on the column names using grep:
+```
+ypr<-grep("yaw|pitch|roll",names(training))
+
+tra_ypr<-training[,ypr]
+tra_ypr$classe<-training$classe
+
+cv_ypr<-cv[,ypr]
+cv_ypr$classe<-cv$classe
+```
+Training using Random Forest:
+```
+set.seed(1)
+fit_rf<-train(classe~.,method="rf",data=tra_ypr)
+```
+
+### Evaluating the model
+Checking the prediction on the training set (not telling much, but it doesn't harm), and the cv set:
+```
+pred_train_rf<-predict(fit_rf,tra_ypr)
+sum(pred_train_rf==tra_ypr$classe)/dim(tra_ypr)[1]
+[1] 1 # 100% prediction of the training
+
+pred_cv_rf<-predict(fit_rf,cv_ypr)
+sum(pred_cv_rf==test_ypr$classe)/dim(cv_ypr)[1]
+[1] 0.9868805 # 98.7% prediction of the cv
+```
+### Predicting the test set
+The model I created is satisfying (98.7% accuracy).
+Now I'll just train over all the training data (training and cv together) to get even better prediction, and I'll try to predict the test set:
+```
+all_tra<-NewData[,ypr]
+all_tra$classe<-NewData$classe
+
+fit_rf_for_test<-train(classe~.,method="rf",data=all_tra)
+pred_test<-predict(fit_rf_for_test,testData)
+
+pred_test #Getting he results
+[1] B A B A A E D B A A B C B A E E A B B B 
+# 20/20 correct results!!!
+```
+
+### Writing the results to the files
+```
+pml_write_files = function(x){
+        n = length(x)
+        for(i in 1:n){
+                filename = paste0(".\\project\\problem_id_",i,".txt")
+                write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+        }
+}
+
+pml_write_files(pred_test)
+```
+
+**GOOD LUCK!!!**
